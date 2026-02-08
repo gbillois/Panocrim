@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>PanoCrim - Panorama de la Cybercriminalit&eacute;</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡</text></svg>">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="app-header">
+            <h1 class="app-title">PanoCrim</h1>
+            <p class="app-subtitle">Panorama Cybercriminalit&eacute;</p>
+        </header>
+
+        <!-- Main content area -->
+        <main id="main-content">
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number" id="stat-total">0</span>
+                        <span class="stat-label">Articles</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="stat-month">0</span>
+                        <span class="stat-label">Ce mois</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="stat-categories">0</span>
+                        <span class="stat-label">Cat&eacute;gories</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="stat-pending">0</span>
+                        <span class="stat-label">En attente</span>
+                    </div>
+                </div>
+
+                <div class="section-header">
+                    <h2>Derniers articles</h2>
+                </div>
+                <div id="recent-articles" class="articles-list">
+                    <p class="empty-state">Aucun article. Ajoutez une URL pour commencer.</p>
+                </div>
+
+                <div class="section-header">
+                    <h2>R&eacute;partition par cat&eacute;gorie</h2>
+                </div>
+                <div id="category-chart" class="category-bars"></div>
+            </section>
+
+            <!-- Add URL View -->
+            <section id="view-add" class="view">
+                <h2>Ajouter un article</h2>
+                <form id="add-url-form" class="form">
+                    <div class="form-group">
+                        <label for="input-url">URL de l'article</label>
+                        <input type="url" id="input-url" placeholder="https://..." required>
+                    </div>
+                    <div class="form-group">
+                        <label for="input-notes">Notes (optionnel)</label>
+                        <textarea id="input-notes" rows="3" placeholder="Contexte ou notes sur cet article..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full" id="btn-analyze">
+                        Analyser avec Claude
+                    </button>
+                </form>
+
+                <div id="analysis-status" class="analysis-status hidden">
+                    <div class="spinner"></div>
+                    <p id="analysis-message">Analyse en cours...</p>
+                </div>
+
+                <div id="analysis-result" class="analysis-result hidden">
+                    <h3>R&eacute;sultat de l'analyse</h3>
+                    <div id="analysis-content"></div>
+                    <button class="btn btn-secondary btn-full" id="btn-save-analysis">
+                        Sauvegarder dans la base
+                    </button>
+                </div>
+
+                <div class="divider"></div>
+                <h2>Analyse en lot</h2>
+                <form id="batch-url-form" class="form">
+                    <div class="form-group">
+                        <label for="input-batch-urls">URLs (une par ligne)</label>
+                        <textarea id="input-batch-urls" rows="6" placeholder="https://article1.com&#10;https://article2.com&#10;https://article3.com"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full" id="btn-batch-analyze">
+                        Analyser le lot
+                    </button>
+                </form>
+                <div id="batch-progress" class="hidden">
+                    <div class="progress-bar"><div class="progress-fill" id="batch-progress-fill"></div></div>
+                    <p id="batch-progress-text"></p>
+                </div>
+            </section>
+
+            <!-- Database View -->
+            <section id="view-database" class="view">
+                <div class="filters-bar">
+                    <select id="filter-category" class="filter-select">
+                        <option value="">Toutes cat&eacute;gories</option>
+                    </select>
+                    <select id="filter-month" class="filter-select">
+                        <option value="">Tous les mois</option>
+                    </select>
+                    <select id="filter-impact" class="filter-select">
+                        <option value="">Tout impact</option>
+                        <option value="critique">Critique</option>
+                        <option value="haut">Haut</option>
+                        <option value="moyen">Moyen</option>
+                        <option value="faible">Faible</option>
+                    </select>
+                    <input type="search" id="filter-search" class="filter-search" placeholder="Rechercher...">
+                </div>
+                <div id="database-articles" class="articles-list">
+                    <p class="empty-state">Aucun article dans la base.</p>
+                </div>
+            </section>
+
+            <!-- Synthesis View -->
+            <section id="view-synthesis" class="view">
+                <h2>G&eacute;n&eacute;rer une synth&egrave;se</h2>
+                <div class="form">
+                    <div class="form-group">
+                        <label for="synth-type">Type de synth&egrave;se</label>
+                        <select id="synth-type" class="filter-select">
+                            <option value="monthly">Synth&egrave;se mensuelle</option>
+                            <option value="category">Synth&egrave;se par cat&eacute;gorie</option>
+                            <option value="global">Synth&egrave;se globale / tendances</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="synth-month-group">
+                        <label for="synth-month">Mois</label>
+                        <input type="month" id="synth-month">
+                    </div>
+                    <div class="form-group hidden" id="synth-category-group">
+                        <label for="synth-category">Cat&eacute;gorie</label>
+                        <select id="synth-category" class="filter-select">
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-full" id="btn-generate-synthesis">
+                        G&eacute;n&eacute;rer la synth&egrave;se
+                    </button>
+                </div>
+
+                <div id="synthesis-status" class="analysis-status hidden">
+                    <div class="spinner"></div>
+                    <p>G&eacute;n&eacute;ration de la synth&egrave;se...</p>
+                </div>
+
+                <div id="synthesis-result" class="synthesis-result hidden">
+                    <div id="synthesis-content" class="markdown-content"></div>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" id="btn-copy-synthesis">Copier</button>
+                        <button class="btn btn-secondary" id="btn-save-synthesis">Sauvegarder</button>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+                <h2>Synth&egrave;ses sauvegard&eacute;es</h2>
+                <div id="saved-syntheses" class="articles-list">
+                    <p class="empty-state">Aucune synth&egrave;se sauvegard&eacute;e.</p>
+                </div>
+            </section>
+
+            <!-- LinkedIn Post View -->
+            <section id="view-linkedin" class="view">
+                <h2>G&eacute;n&eacute;rer un post LinkedIn</h2>
+                <div class="form">
+                    <div class="form-group">
+                        <label for="linkedin-type">Type de post</label>
+                        <select id="linkedin-type" class="filter-select">
+                            <option value="highlight">Mettre en relief une news</option>
+                            <option value="synthesis">Synth&egrave;se d'une cat&eacute;gorie</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="linkedin-article-group">
+                        <label for="linkedin-article">Article &agrave; mettre en relief</label>
+                        <select id="linkedin-article" class="filter-select">
+                        </select>
+                    </div>
+                    <div class="form-group hidden" id="linkedin-category-group">
+                        <label for="linkedin-category">Cat&eacute;gorie</label>
+                        <select id="linkedin-category" class="filter-select">
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="linkedin-tone">Ton du post</label>
+                        <select id="linkedin-tone" class="filter-select">
+                            <option value="expert">Expert / Analytique</option>
+                            <option value="alerte">Alerte / Urgence</option>
+                            <option value="pedagogique">P&eacute;dagogique</option>
+                            <option value="opinion">Opinion / Tribune</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="linkedin-language">Langue</label>
+                        <select id="linkedin-language" class="filter-select">
+                            <option value="fr">Fran&ccedil;ais</option>
+                            <option value="en">Anglais</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-full" id="btn-generate-linkedin">
+                        G&eacute;n&eacute;rer le post
+                    </button>
+                </div>
+
+                <div id="linkedin-status" class="analysis-status hidden">
+                    <div class="spinner"></div>
+                    <p>G&eacute;n&eacute;ration du post...</p>
+                </div>
+
+                <div id="linkedin-result" class="linkedin-result hidden">
+                    <div id="linkedin-preview" class="linkedin-preview"></div>
+                    <div class="char-count"><span id="linkedin-chars">0</span> / 3000 caract&egrave;res</div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" id="btn-copy-linkedin">Copier le post</button>
+                        <button class="btn btn-secondary" id="btn-regenerate-linkedin">Reg&eacute;n&eacute;rer</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings View -->
+            <section id="view-settings" class="view">
+                <h2>Param&egrave;tres</h2>
+                <div class="form">
+                    <div class="form-group">
+                        <label for="setting-api-key">Cl&eacute; API Anthropic (Claude)</label>
+                        <div class="input-with-toggle">
+                            <input type="password" id="setting-api-key" placeholder="sk-ant-...">
+                            <button type="button" class="btn-icon" id="toggle-api-key" aria-label="Afficher/masquer">
+                                &#128065;
+                            </button>
+                        </div>
+                        <small class="form-help">Votre cl&eacute; est stock&eacute;e localement dans votre navigateur uniquement.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="setting-model">Mod&egrave;le Claude</label>
+                        <select id="setting-model" class="filter-select">
+                            <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                            <option value="claude-haiku-4-20250414">Claude Haiku 4</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-full" id="btn-save-settings">
+                        Sauvegarder les param&egrave;tres
+                    </button>
+                </div>
+
+                <div class="divider"></div>
+
+                <h2>Gestion des donn&eacute;es</h2>
+                <div class="btn-group vertical">
+                    <button class="btn btn-secondary btn-full" id="btn-export-db">
+                        Exporter la base (JSON)
+                    </button>
+                    <button class="btn btn-secondary btn-full" id="btn-import-db">
+                        Importer une base (JSON)
+                    </button>
+                    <input type="file" id="import-file" accept=".json" class="hidden">
+                    <button class="btn btn-danger btn-full" id="btn-clear-db">
+                        Effacer toutes les donn&eacute;es
+                    </button>
+                </div>
+            </section>
+
+            <!-- Article Detail Modal -->
+            <div id="article-modal" class="modal hidden">
+                <div class="modal-content">
+                    <button class="modal-close" id="modal-close">&times;</button>
+                    <div id="modal-body"></div>
+                </div>
+            </div>
+
+            <!-- Toast notifications -->
+            <div id="toast-container" class="toast-container"></div>
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav">
+            <button class="nav-btn active" data-view="dashboard">
+                <svg viewBox="0 0 24 24" class="nav-icon"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+                <span>Accueil</span>
+            </button>
+            <button class="nav-btn" data-view="add">
+                <svg viewBox="0 0 24 24" class="nav-icon"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                <span>Ajouter</span>
+            </button>
+            <button class="nav-btn" data-view="database">
+                <svg viewBox="0 0 24 24" class="nav-icon"><path d="M12 2C6.48 2 2 4.69 2 8v8c0 3.31 4.48 6 10 6s10-2.69 10-6V8c0-3.31-4.48-6-10-6zm0 14c-4.42 0-8-1.79-8-4v-2.55c1.93 1.52 4.82 2.55 8 2.55s6.07-1.03 8-2.55V12c0 2.21-3.58 4-8 4zm0-6c-4.42 0-8-1.79-8-4s3.58-4 8-4 8 1.79 8 4-3.58 4-8 4z"/></svg>
+                <span>Base</span>
+            </button>
+            <button class="nav-btn" data-view="synthesis">
+                <svg viewBox="0 0 24 24" class="nav-icon"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                <span>Synth&egrave;se</span>
+            </button>
+            <button class="nav-btn" data-view="linkedin">
+                <svg viewBox="0 0 24 24" class="nav-icon"><path d="M19 3a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14m-.5 15.5v-5.3a3.26 3.26 0 00-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 011.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 001.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 00-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
+                <span>LinkedIn</span>
+            </button>
+            <button class="nav-btn" data-view="settings">
+                <svg viewBox="0 0 24 24" class="nav-icon"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z"/></svg>
+                <span>Config</span>
+            </button>
+        </nav>
+    </div>
+
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="js/db.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
