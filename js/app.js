@@ -1,7 +1,9 @@
 // PanoCrim - Main Application Logic
+// Dynamic multi-dimensional taxonomy
 
 let currentAnalysis = null;
 let currentSynthesisContent = null;
+let currentDashboardDimension = 'attack_type';
 
 // ==================== Navigation ====================
 
@@ -15,12 +17,30 @@ function navigateTo(viewName) {
     if (view) view.classList.add('active');
     if (btn) btn.classList.add('active');
 
-    // Refresh data when navigating
     if (viewName === 'dashboard') refreshDashboard();
     if (viewName === 'database') refreshDatabase();
     if (viewName === 'synthesis') refreshSynthesisView();
     if (viewName === 'linkedin') refreshLinkedInView();
     if (viewName === 'settings') loadSettings();
+}
+
+// Click on a dimension badge to navigate to database filtered by that value
+function filterByDimension(dimension, value) {
+    // Close modal if open
+    closeModal();
+
+    navigateTo('database');
+
+    // Set filters
+    const dimSelect = document.getElementById('filter-dimension');
+    const valSelect = document.getElementById('filter-dim-value');
+    if (dimSelect) dimSelect.value = dimension;
+
+    // Need to populate value select first, then set value
+    updateDimensionValueSelect().then(() => {
+        if (valSelect) valSelect.value = value;
+        refreshDatabase();
+    });
 }
 
 // ==================== Dashboard ====================
@@ -30,11 +50,37 @@ async function refreshDashboard() {
 
     document.getElementById('stat-total').textContent = stats.total;
     document.getElementById('stat-month').textContent = stats.month;
-    document.getElementById('stat-categories').textContent = stats.categories;
+    document.getElementById('stat-tags').textContent = stats.tagsCount;
     document.getElementById('stat-pending').textContent = stats.pending;
 
     renderArticlesList(stats.recentArticles, 'recent-articles');
-    renderCategoryBars(stats.categoryCount, stats.total);
+
+    // Update dimension chart
+    const taxonomy = await buildTaxonomy();
+    populateDashboardDimSelect(taxonomy);
+    renderDimensionBars(taxonomy, currentDashboardDimension);
+}
+
+function populateDashboardDimSelect(taxonomy) {
+    const el = document.getElementById('dashboard-dim-select');
+    if (!el) return;
+    const current = el.value || currentDashboardDimension;
+    el.innerHTML = '';
+    DIMENSION_KEYS.forEach(dim => {
+        const count = Object.keys(taxonomy[dim]).length;
+        if (count > 0) {
+            el.innerHTML += `<option value="${dim}">${DIMENSIONS[dim].label}</option>`;
+        }
+    });
+    el.value = current;
+    currentDashboardDimension = el.value || 'attack_type';
+}
+
+function handleDashboardDimChange() {
+    currentDashboardDimension = document.getElementById('dashboard-dim-select').value;
+    buildTaxonomy().then(taxonomy => {
+        renderDimensionBars(taxonomy, currentDashboardDimension);
+    });
 }
 
 // ==================== Add URL ====================
@@ -47,21 +93,17 @@ async function handleAddUrl(e) {
     const notes = notesInput.value.trim();
 
     if (!url) return;
-
-    // Check API key
     if (!getApiKey()) {
-        showToast('Configurez votre clé API dans Config.', 'error');
+        showToast('Configurez votre cl\u00e9 API dans Config.', 'error');
         return;
     }
 
-    // Check duplicate
     const existing = await getArticleByUrl(url);
     if (existing) {
-        showToast('Cet article est déjà dans la base.', 'error');
+        showToast('Cet article est d\u00e9j\u00e0 dans la base.', 'error');
         return;
     }
 
-    // Show analysis status
     const statusEl = document.getElementById('analysis-status');
     const resultEl = document.getElementById('analysis-result');
     const btnEl = document.getElementById('btn-analyze');
@@ -72,21 +114,17 @@ async function handleAddUrl(e) {
     btnEl.disabled = true;
 
     try {
-        // Step 1: Fetch content
-        msgEl.textContent = 'Récupération du contenu...';
+        msgEl.textContent = 'R\u00e9cup\u00e9ration du contenu...';
         const content = await fetchArticleContent(url);
 
-        // Step 2: Analyze with Claude
         msgEl.textContent = 'Analyse par Claude en cours...';
         const analysis = await analyzeArticle(url, content, notes);
 
-        // Store analysis for saving
         currentAnalysis = { ...analysis, url, notes, raw_content: content || '' };
 
-        // Show preview
         document.getElementById('analysis-content').innerHTML = renderAnalysisPreview(analysis);
         resultEl.classList.remove('hidden');
-        showToast('Analyse terminée !', 'success');
+        showToast('Analyse termin\u00e9e !', 'success');
     } catch (err) {
         showToast(`Erreur : ${err.message}`, 'error');
     } finally {
@@ -99,10 +137,8 @@ async function saveAnalysis() {
     if (!currentAnalysis) return;
     try {
         await addArticle(currentAnalysis);
-        showToast('Article sauvegardé !', 'success');
+        showToast('Article sauvegard\u00e9 !', 'success');
         currentAnalysis = null;
-
-        // Reset form
         document.getElementById('add-url-form').reset();
         document.getElementById('analysis-result').classList.add('hidden');
     } catch (err) {
@@ -116,12 +152,11 @@ async function handleBatchAnalyze(e) {
     const urls = textarea.value.split('\n').map(u => u.trim()).filter(u => u && u.startsWith('http'));
 
     if (urls.length === 0) {
-        showToast('Aucune URL valide trouvée.', 'error');
+        showToast('Aucune URL valide trouv\u00e9e.', 'error');
         return;
     }
-
     if (!getApiKey()) {
-        showToast('Configurez votre clé API dans Config.', 'error');
+        showToast('Configurez votre cl\u00e9 API dans Config.', 'error');
         return;
     }
 
@@ -144,10 +179,7 @@ async function handleBatchAnalyze(e) {
 
         try {
             const existing = await getArticleByUrl(url);
-            if (existing) {
-                errors++;
-                continue;
-            }
+            if (existing) { errors++; continue; }
 
             const content = await fetchArticleContent(url);
             const analysis = await analyzeArticle(url, content, '');
@@ -155,31 +187,33 @@ async function handleBatchAnalyze(e) {
             success++;
         } catch (err) {
             console.error(`Error analyzing ${url}:`, err);
-            // Save as pending
-            await addArticle({ url, status: 'error', notes: err.message });
+            await addArticle({ url, status: 'error', notes: err.message, dimensions: {} });
             errors++;
         }
 
-        // Small delay between API calls
         if (i < urls.length - 1) {
             await new Promise(r => setTimeout(r, 1000));
         }
     }
 
-    textEl.textContent = `Terminé : ${success} analysés, ${errors} erreurs`;
+    textEl.textContent = `Termin\u00e9 : ${success} analys\u00e9s, ${errors} erreurs`;
     btnEl.disabled = false;
     textarea.value = '';
-    showToast(`Lot terminé : ${success} articles ajoutés.`, 'success');
+    showToast(`Lot termin\u00e9 : ${success} articles ajout\u00e9s.`, 'success');
 }
 
 // ==================== Database ====================
 
 async function refreshDatabase() {
     await populateMonthFilter();
-    populateFilterSelects();
+    await populateDimensionFilterSelects();
+
+    const dimSelect = document.getElementById('filter-dimension');
+    const valSelect = document.getElementById('filter-dim-value');
 
     const filters = {
-        category: document.getElementById('filter-category').value,
+        dimension: dimSelect?.value || '',
+        dimensionValue: valSelect?.value || '',
         month: document.getElementById('filter-month').value,
         impact: document.getElementById('filter-impact').value,
         search: document.getElementById('filter-search').value
@@ -194,7 +228,6 @@ async function refreshDatabase() {
 async function showArticleDetail(id) {
     const article = await getArticle(id);
     if (!article) return;
-
     document.getElementById('modal-body').innerHTML = renderArticleDetail(article);
     document.getElementById('article-modal').classList.remove('hidden');
 }
@@ -209,27 +242,25 @@ async function confirmDeleteArticle(id) {
         closeModal();
         refreshDashboard();
         refreshDatabase();
-        showToast('Article supprimé.', 'info');
+        showToast('Article supprim\u00e9.', 'info');
     }
 }
 
 // ==================== Synthesis ====================
 
 async function refreshSynthesisView() {
-    populateFilterSelects();
+    await populateSynthDimensionSelects();
 
-    // Set default month to current
     const monthInput = document.getElementById('synth-month');
     if (!monthInput.value) {
         const now = new Date();
         monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     }
 
-    // Render saved syntheses
     const syntheses = await getAllSyntheses();
     const container = document.getElementById('saved-syntheses');
     if (syntheses.length === 0) {
-        container.innerHTML = '<p class="empty-state">Aucune synthèse sauvegardée.</p>';
+        container.innerHTML = '<p class="empty-state">Aucune synth\u00e8se sauvegard\u00e9e.</p>';
     } else {
         container.innerHTML = syntheses.map(renderSynthesisCard).join('');
     }
@@ -237,8 +268,8 @@ async function refreshSynthesisView() {
 
 function handleSynthTypeChange() {
     const type = document.getElementById('synth-type').value;
-    document.getElementById('synth-month-group').classList.toggle('hidden', type === 'category');
-    document.getElementById('synth-category-group').classList.toggle('hidden', type !== 'category');
+    document.getElementById('synth-month-group').classList.toggle('hidden', type !== 'monthly');
+    document.getElementById('synth-dim-group').classList.toggle('hidden', type !== 'dimension');
 }
 
 async function handleGenerateSynthesis() {
@@ -248,7 +279,7 @@ async function handleGenerateSynthesis() {
     const btnEl = document.getElementById('btn-generate-synthesis');
 
     if (!getApiKey()) {
-        showToast('Configurez votre clé API dans Config.', 'error');
+        showToast('Configurez votre cl\u00e9 API dans Config.', 'error');
         return;
     }
 
@@ -257,27 +288,23 @@ async function handleGenerateSynthesis() {
 
     if (type === 'monthly') {
         const month = document.getElementById('synth-month').value;
-        if (!month) {
-            showToast('Sélectionnez un mois.', 'error');
-            return;
-        }
+        if (!month) { showToast('S\u00e9lectionnez un mois.', 'error'); return; }
         const [year, mo] = month.split('-').map(Number);
         articles = await getArticlesByMonth(year, mo);
         options.period = new Date(year, mo - 1).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long' });
-    } else if (type === 'category') {
-        const category = document.getElementById('synth-category').value;
-        if (!category) {
-            showToast('Sélectionnez une catégorie.', 'error');
-            return;
-        }
-        articles = await getArticlesByCategory(category);
-        options.category = category;
+    } else if (type === 'dimension') {
+        const dim = document.getElementById('synth-dimension').value;
+        const val = document.getElementById('synth-dim-value').value;
+        if (!dim || !val) { showToast('S\u00e9lectionnez dimension et valeur.', 'error'); return; }
+        articles = await getArticlesByDimensionValue(dim, val);
+        options.dimension = dim;
+        options.dimensionValue = val;
     } else {
         articles = await getAllArticles();
     }
 
     if (articles.length === 0) {
-        showToast('Aucun article pour cette sélection.', 'error');
+        showToast('Aucun article pour cette s\u00e9lection.', 'error');
         return;
     }
 
@@ -287,11 +314,16 @@ async function handleGenerateSynthesis() {
 
     try {
         const content = await generateSynthesis(articles, type, options);
-        currentSynthesisContent = { type, content, period: options.period || null, category: options.category || null };
+        currentSynthesisContent = {
+            type, content,
+            period: options.period || null,
+            dimension: options.dimension || null,
+            dimensionValue: options.dimensionValue || null
+        };
 
         document.getElementById('synthesis-content').innerHTML = marked.parse(content);
         resultEl.classList.remove('hidden');
-        showToast('Synthèse générée !', 'success');
+        showToast('Synth\u00e8se g\u00e9n\u00e9r\u00e9e !', 'success');
     } catch (err) {
         showToast(`Erreur : ${err.message}`, 'error');
     } finally {
@@ -304,7 +336,7 @@ async function saveSynthesis() {
     if (!currentSynthesisContent) return;
     try {
         await addSynthesis(currentSynthesisContent);
-        showToast('Synthèse sauvegardée !', 'success');
+        showToast('Synth\u00e8se sauvegard\u00e9e !', 'success');
         refreshSynthesisView();
     } catch (err) {
         showToast(`Erreur : ${err.message}`, 'error');
@@ -314,7 +346,7 @@ async function saveSynthesis() {
 function copySynthesis() {
     if (!currentSynthesisContent) return;
     navigator.clipboard.writeText(currentSynthesisContent.content)
-        .then(() => showToast('Copié !', 'success'))
+        .then(() => showToast('Copi\u00e9 !', 'success'))
         .catch(() => showToast('Erreur de copie.', 'error'));
 }
 
@@ -323,13 +355,15 @@ async function showSynthesisDetail(id) {
     const s = syntheses.find(x => x.id === id);
     if (!s) return;
 
-    const typeLabels = { monthly: 'Mensuelle', category: 'Catégorie', global: 'Globale' };
+    const typeLabels = { monthly: 'Mensuelle', dimension: 'Th\u00e9matique', global: 'Globale' };
+    const title = `${typeLabels[s.type] || s.type}${s.period ? ' - ' + s.period : ''}${s.dimensionValue ? ' - ' + s.dimensionValue : ''}`;
+
     document.getElementById('modal-body').innerHTML = `
-        <h2>${typeLabels[s.type] || s.type}${s.period ? ` - ${s.period}` : ''}${s.category ? ` - ${CATEGORIES[s.category] || s.category}` : ''}</h2>
+        <h2>${escapeHtml(title)}</h2>
         <p style="color:var(--text-muted);margin-bottom:16px;">${s.date_generated?.split('T')[0]}</p>
         <div class="markdown-content">${marked.parse(s.content || '')}</div>
         <div class="detail-actions">
-            <button class="btn btn-secondary" onclick="navigator.clipboard.writeText(${JSON.stringify(JSON.stringify(s.content))}).then(()=>showToast('Copié !','success'))">Copier</button>
+            <button class="btn btn-secondary" onclick="navigator.clipboard.writeText(${JSON.stringify(JSON.stringify(s.content))}).then(()=>showToast('Copi\u00e9 !','success'))">Copier</button>
             <button class="btn btn-danger" onclick="deleteSynthesisAndClose(${s.id})">Supprimer</button>
         </div>
     `;
@@ -337,25 +371,25 @@ async function showSynthesisDetail(id) {
 }
 
 async function deleteSynthesisAndClose(id) {
-    if (confirm('Supprimer cette synthèse ?')) {
+    if (confirm('Supprimer cette synth\u00e8se ?')) {
         await deleteSynthesis(id);
         closeModal();
         refreshSynthesisView();
-        showToast('Synthèse supprimée.', 'info');
+        showToast('Synth\u00e8se supprim\u00e9e.', 'info');
     }
 }
 
 // ==================== LinkedIn ====================
 
 async function refreshLinkedInView() {
-    populateFilterSelects();
+    await populateSynthDimensionSelects();
     await populateArticleSelect();
 }
 
 function handleLinkedInTypeChange() {
     const type = document.getElementById('linkedin-type').value;
     document.getElementById('linkedin-article-group').classList.toggle('hidden', type !== 'highlight');
-    document.getElementById('linkedin-category-group').classList.toggle('hidden', type !== 'synthesis');
+    document.getElementById('linkedin-dim-group').classList.toggle('hidden', type !== 'synthesis');
 }
 
 async function handleGenerateLinkedIn() {
@@ -367,7 +401,7 @@ async function handleGenerateLinkedIn() {
     const btnEl = document.getElementById('btn-generate-linkedin');
 
     if (!getApiKey()) {
-        showToast('Configurez votre clé API dans Config.', 'error');
+        showToast('Configurez votre cl\u00e9 API dans Config.', 'error');
         return;
     }
 
@@ -375,21 +409,17 @@ async function handleGenerateLinkedIn() {
 
     if (type === 'highlight') {
         const articleId = parseInt(document.getElementById('linkedin-article').value);
-        if (!articleId) {
-            showToast('Sélectionnez un article.', 'error');
-            return;
-        }
+        if (!articleId) { showToast('S\u00e9lectionnez un article.', 'error'); return; }
         options.article = await getArticle(articleId);
     } else {
-        const category = document.getElementById('linkedin-category').value;
-        if (!category) {
-            showToast('Sélectionnez une catégorie.', 'error');
-            return;
-        }
-        options.category = category;
-        options.articles = await getArticlesByCategory(category);
+        const dim = document.getElementById('linkedin-dimension').value;
+        const val = document.getElementById('linkedin-dim-value').value;
+        if (!dim || !val) { showToast('S\u00e9lectionnez dimension et valeur.', 'error'); return; }
+        options.dimension = dim;
+        options.dimensionValue = val;
+        options.articles = await getArticlesByDimensionValue(dim, val);
         if (options.articles.length === 0) {
-            showToast('Aucun article dans cette catégorie.', 'error');
+            showToast('Aucun article pour cette s\u00e9lection.', 'error');
             return;
         }
     }
@@ -403,7 +433,7 @@ async function handleGenerateLinkedIn() {
         document.getElementById('linkedin-preview').textContent = post;
         document.getElementById('linkedin-chars').textContent = post.length;
         resultEl.classList.remove('hidden');
-        showToast('Post généré !', 'success');
+        showToast('Post g\u00e9n\u00e9r\u00e9 !', 'success');
     } catch (err) {
         showToast(`Erreur : ${err.message}`, 'error');
     } finally {
@@ -415,7 +445,7 @@ async function handleGenerateLinkedIn() {
 function copyLinkedInPost() {
     const text = document.getElementById('linkedin-preview').textContent;
     navigator.clipboard.writeText(text)
-        .then(() => showToast('Post copié !', 'success'))
+        .then(() => showToast('Post copi\u00e9 !', 'success'))
         .catch(() => showToast('Erreur de copie.', 'error'));
 }
 
@@ -433,10 +463,9 @@ function loadSettings() {
 function handleSaveSettings() {
     const apiKey = document.getElementById('setting-api-key').value.trim();
     const model = document.getElementById('setting-model').value;
-
     setApiKey(apiKey);
     setModel(model);
-    showToast('Paramètres sauvegardés.', 'success');
+    showToast('Param\u00e8tres sauvegard\u00e9s.', 'success');
 }
 
 function toggleApiKeyVisibility() {
@@ -454,7 +483,7 @@ async function handleExportDb() {
         a.download = `panocrim-export-${new Date().toISOString().split('T')[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast('Export téléchargé.', 'success');
+        showToast('Export t\u00e9l\u00e9charg\u00e9.', 'success');
     } catch (err) {
         showToast(`Erreur : ${err.message}`, 'error');
     }
@@ -467,11 +496,10 @@ function handleImportDb() {
 async function handleImportFile(e) {
     const file = e.target.files[0];
     if (!file) return;
-
     try {
         const text = await file.text();
         await importDatabase(text);
-        showToast('Import réussi !', 'success');
+        showToast('Import r\u00e9ussi !', 'success');
         refreshDashboard();
     } catch (err) {
         showToast(`Erreur d'import : ${err.message}`, 'error');
@@ -480,9 +508,9 @@ async function handleImportFile(e) {
 }
 
 async function handleClearDb() {
-    if (confirm('Êtes-vous sûr de vouloir effacer toutes les données ? Cette action est irréversible.')) {
+    if (confirm('\u00cates-vous s\u00fbr de vouloir effacer toutes les donn\u00e9es ? Cette action est irr\u00e9versible.')) {
         await clearDatabase();
-        showToast('Base de données effacée.', 'info');
+        showToast('Base de donn\u00e9es effac\u00e9e.', 'info');
         refreshDashboard();
     }
 }
@@ -495,27 +523,34 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => navigateTo(btn.dataset.view));
     });
 
-    // Add URL form
+    // Add URL
     document.getElementById('add-url-form').addEventListener('submit', handleAddUrl);
     document.getElementById('btn-save-analysis').addEventListener('click', saveAnalysis);
-
-    // Batch
     document.getElementById('batch-url-form').addEventListener('submit', handleBatchAnalyze);
 
     // Database filters
-    ['filter-category', 'filter-month', 'filter-impact'].forEach(id => {
-        document.getElementById(id).addEventListener('change', refreshDatabase);
+    document.getElementById('filter-dimension').addEventListener('change', async () => {
+        await updateDimensionValueSelect();
+        refreshDatabase();
     });
+    document.getElementById('filter-dim-value').addEventListener('change', refreshDatabase);
+    document.getElementById('filter-month').addEventListener('change', refreshDatabase);
+    document.getElementById('filter-impact').addEventListener('change', refreshDatabase);
     document.getElementById('filter-search').addEventListener('input', debounce(refreshDatabase, 300));
+
+    // Dashboard dimension selector
+    document.getElementById('dashboard-dim-select').addEventListener('change', handleDashboardDimChange);
 
     // Synthesis
     document.getElementById('synth-type').addEventListener('change', handleSynthTypeChange);
+    document.getElementById('synth-dimension').addEventListener('change', () => updateSynthValueSelect('synth-dimension', 'synth-dim-value'));
     document.getElementById('btn-generate-synthesis').addEventListener('click', handleGenerateSynthesis);
     document.getElementById('btn-copy-synthesis').addEventListener('click', copySynthesis);
     document.getElementById('btn-save-synthesis').addEventListener('click', saveSynthesis);
 
     // LinkedIn
     document.getElementById('linkedin-type').addEventListener('change', handleLinkedInTypeChange);
+    document.getElementById('linkedin-dimension').addEventListener('change', () => updateSynthValueSelect('linkedin-dimension', 'linkedin-dim-value'));
     document.getElementById('btn-generate-linkedin').addEventListener('click', handleGenerateLinkedIn);
     document.getElementById('btn-copy-linkedin').addEventListener('click', copyLinkedInPost);
     document.getElementById('btn-regenerate-linkedin').addEventListener('click', regenerateLinkedIn);
@@ -534,15 +569,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === e.currentTarget) closeModal();
     });
 
-    // Populate selects
-    populateFilterSelects();
-
     // Initial load
     refreshDashboard();
 
-    // Check API key
     if (!getApiKey()) {
-        showToast('Configurez votre clé API Anthropic dans Config.', 'info');
+        showToast('Configurez votre cl\u00e9 API Anthropic dans Config.', 'info');
     }
 });
 

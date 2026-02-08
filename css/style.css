@@ -221,20 +221,58 @@ h2 {
     white-space: nowrap;
 }
 
-.badge-category {
-    background: var(--accent-glow);
-    color: var(--accent);
-    border: 1px solid var(--accent-dim);
-}
-
 .badge-impact-critique { background: rgba(255, 71, 87, 0.15); color: #ff4757; border: 1px solid rgba(255, 71, 87, 0.3); }
 .badge-impact-haut { background: rgba(255, 165, 2, 0.15); color: #ffa502; border: 1px solid rgba(255, 165, 2, 0.3); }
 .badge-impact-moyen { background: rgba(0, 212, 255, 0.15); color: #00d4ff; border: 1px solid rgba(0, 212, 255, 0.3); }
 .badge-impact-faible { background: rgba(46, 213, 115, 0.15); color: #2ed573; border: 1px solid rgba(46, 213, 115, 0.3); }
 
-.badge-status-pending { background: rgba(255, 165, 2, 0.15); color: #ffa502; }
-.badge-status-analyzed { background: rgba(46, 213, 115, 0.15); color: #2ed573; }
-.badge-status-error { background: rgba(255, 71, 87, 0.15); color: #ff4757; }
+/* Dynamic dimension badges - color set via CSS variable --dim-color */
+.dim-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    color: var(--dim-color, var(--accent));
+    background: color-mix(in srgb, var(--dim-color, var(--accent)) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--dim-color, var(--accent)) 35%, transparent);
+    transition: background 0.2s;
+}
+
+.dim-badge:hover {
+    background: color-mix(in srgb, var(--dim-color, var(--accent)) 25%, transparent);
+}
+
+.dim-group {
+    margin-bottom: 10px;
+}
+
+.dim-group-label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--dim-color, var(--text-muted));
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.article-card-dims {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+/* Inline filter select (dashboard) */
+.filter-select-inline {
+    width: auto;
+    min-width: 120px;
+    padding: 4px 8px;
+    font-size: 13px;
+}
 
 /* Category bars chart */
 .category-bars {
@@ -248,6 +286,14 @@ h2 {
     display: flex;
     align-items: center;
     gap: 8px;
+    cursor: pointer;
+    padding: 2px 0;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.cat-bar-row:hover {
+    background: var(--bg-input);
 }
 
 .cat-bar-label {
