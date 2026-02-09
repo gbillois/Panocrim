@@ -58,12 +58,17 @@ function extractTextFromHtml(html) {
 }
 
 // ==================== OpenAI API Call Helper ====================
+// OpenAI API doesn't support CORS from browsers, so we use a proxy
+
+const API_CORS_PROXY = 'https://corsproxy.io/?';
 
 async function callLLM(prompt, maxTokens = 2048) {
     const apiKey = getApiKey();
     if (!apiKey) throw new Error('Cl\u00e9 API non configur\u00e9e. Allez dans Config pour ajouter votre cl\u00e9.');
 
-    const response = await fetch(API_BASE, {
+    const proxyUrl = API_CORS_PROXY + encodeURIComponent(API_BASE);
+
+    const response = await fetch(proxyUrl, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
