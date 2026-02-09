@@ -8,6 +8,12 @@ db.version(2).stores({
     syntheses: '++id, type, date_generated, period'
 });
 
+db.version(3).stores({
+    articles: '++id, url, title, source, date_published, date_added, impact, status, origin, feed_id',
+    syntheses: '++id, type, date_generated, period',
+    feeds: '++id, url, name, last_checked, enabled'
+});
+
 // ==================== Dimensions Definition ====================
 // These define the AXES of classification. Values within each are dynamic.
 
@@ -125,7 +131,9 @@ async function addArticle(articleData) {
         recommendations: articleData.recommendations || '',
         raw_content: articleData.raw_content || '',
         notes: articleData.notes || '',
-        status: articleData.status || 'analyzed'
+        status: articleData.status || 'analyzed',
+        origin: articleData.origin || 'manual',
+        feed_id: articleData.feed_id || null
     };
     return await db.articles.add(article);
 }
@@ -197,6 +205,10 @@ async function getArticlesByFilters(filters) {
         results = results.filter(a => a.impact === filters.impact);
     }
 
+    if (filters.origin) {
+        results = results.filter(a => (a.origin || 'manual') === filters.origin);
+    }
+
     if (filters.search) {
         const q = filters.search.toLowerCase();
         results = results.filter(a => {
@@ -241,11 +253,14 @@ async function getStats() {
         });
     });
 
+    const rssCount = all.filter(a => a.origin === 'rss').length;
+
     return {
         total: all.length,
         month: thisMonth.length,
         tagsCount: tagSet.size,
         pending: pending.length,
+        rssCount,
         recentArticles: all.slice(0, 10)
     };
 }
@@ -260,6 +275,39 @@ async function getAvailableMonths() {
         }
     });
     return Array.from(months).sort().reverse();
+}
+
+// ==================== Feed CRUD ====================
+
+async function addFeed(feedData) {
+    return await db.feeds.add({
+        url: feedData.url,
+        name: feedData.name || '',
+        last_checked: null,
+        enabled: true,
+        article_count: 0
+    });
+}
+
+async function getAllFeeds() {
+    return await db.feeds.toArray();
+}
+
+async function updateFeed(id, updates) {
+    return await db.feeds.update(id, updates);
+}
+
+async function deleteFeed(id) {
+    return await db.feeds.delete(id);
+}
+
+async function getFeedByUrl(url) {
+    return await db.feeds.where('url').equals(url).first();
+}
+
+async function getFeedArticleCount(feedId) {
+    const all = await getAllArticles();
+    return all.filter(a => a.feed_id === feedId).length;
 }
 
 // ==================== Synthesis CRUD ====================
@@ -284,7 +332,8 @@ async function deleteSynthesis(id) {
 async function exportDatabase() {
     const articles = await getAllArticles();
     const syntheses = await getAllSyntheses();
-    return JSON.stringify({ version: 2, articles, syntheses, exportDate: new Date().toISOString() }, null, 2);
+    const feeds = await getAllFeeds();
+    return JSON.stringify({ version: 3, articles, syntheses, feeds, exportDate: new Date().toISOString() }, null, 2);
 }
 
 async function importDatabase(jsonString) {
@@ -297,9 +346,14 @@ async function importDatabase(jsonString) {
         await db.syntheses.clear();
         await db.syntheses.bulkAdd(data.syntheses);
     }
+    if (data.feeds) {
+        await db.feeds.clear();
+        await db.feeds.bulkAdd(data.feeds);
+    }
 }
 
 async function clearDatabase() {
     await db.articles.clear();
     await db.syntheses.clear();
+    await db.feeds.clear();
 }

@@ -55,10 +55,21 @@ function renderCardDimensions(article) {
     return badges.slice(0, 5).join('');
 }
 
+// ==================== Origin Badge ====================
+
+function renderOriginBadge(article) {
+    if (article.origin === 'rss') {
+        return '<span class="badge badge-origin-rss">RSS</span>';
+    }
+    return '';
+}
+
 // ==================== Article Card ====================
 
 function renderArticleCard(article) {
     const dateStr = article.date_published || article.date_added?.split('T')[0] || '';
+    const statusBadge = article.status === 'pending' ? '<span class="badge badge-status-pending">En attente</span>' :
+                        article.status === 'error' ? '<span class="badge badge-status-error">Erreur</span>' : '';
 
     return `
         <div class="article-card" data-id="${article.id}" onclick="showArticleDetail(${article.id})">
@@ -67,6 +78,8 @@ function renderArticleCard(article) {
             </div>
             <div class="article-card-meta">
                 <span class="badge badge-impact-${article.impact}">${article.impact || '?'}</span>
+                ${renderOriginBadge(article)}
+                ${statusBadge}
                 ${article.source ? `<span>${escapeHtml(article.source)}</span>` : ''}
                 <span>${dateStr}</span>
             </div>
@@ -144,6 +157,7 @@ function renderArticleDetail(article) {
             <div class="detail-section-title">Informations</div>
             <div class="detail-row"><span class="detail-label">Date publication</span><span class="detail-value">${article.date_published || '-'}</span></div>
             <div class="detail-row"><span class="detail-label">Date ajout</span><span class="detail-value">${article.date_added?.split('T')[0] || '-'}</span></div>
+            <div class="detail-row"><span class="detail-label">Origine</span><span class="detail-value">${article.origin === 'rss' ? 'Flux RSS' : 'Manuel'}</span></div>
             <div class="detail-row">
                 <span class="detail-label">URL</span>
                 <span class="detail-value"><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener" style="color:var(--accent);word-break:break-all;">${escapeHtml(article.url)}</a></span>
@@ -352,4 +366,64 @@ async function updateSynthValueSelect(dimSelectId, valSelectId) {
 
     valSelect.disabled = false;
     await populateDimensionSelect(valSelectId, dim, 'Choisir une valeur');
+}
+
+// ==================== Feed Card ====================
+
+function renderFeedCard(feed, articleCount) {
+    const lastChecked = feed.last_checked
+        ? new Date(feed.last_checked).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+        : 'Jamais';
+    const enabledClass = feed.enabled ? '' : ' feed-card-disabled';
+
+    return `
+        <div class="feed-card${enabledClass}" data-feed-id="${feed.id}">
+            <div class="feed-card-header">
+                <span class="feed-card-name">${escapeHtml(feed.name || feed.url)}</span>
+                <label class="feed-toggle">
+                    <input type="checkbox" ${feed.enabled ? 'checked' : ''} onchange="handleToggleFeed(${feed.id}, this.checked)">
+                    <span class="feed-toggle-slider"></span>
+                </label>
+            </div>
+            <div class="feed-card-url">${escapeHtml(feed.url)}</div>
+            <div class="feed-card-meta">
+                <span>${articleCount} article${articleCount > 1 ? 's' : ''}</span>
+                <span>V\u00e9rifi\u00e9 : ${lastChecked}</span>
+            </div>
+            <div class="feed-card-actions">
+                <button class="btn btn-secondary btn-sm" onclick="handleCheckSingleFeed(${feed.id})">Relever</button>
+                <button class="btn btn-danger btn-sm" onclick="handleDeleteFeed(${feed.id})">Supprimer</button>
+            </div>
+        </div>
+    `;
+}
+
+async function renderFeedsList() {
+    const container = document.getElementById('feeds-list');
+    if (!container) return;
+
+    const feeds = await getAllFeeds();
+    if (feeds.length === 0) {
+        container.innerHTML = '<p class="empty-state">Aucun flux RSS configur\u00e9.</p>';
+        return;
+    }
+
+    const cards = [];
+    for (const feed of feeds) {
+        const count = await getFeedArticleCount(feed.id);
+        cards.push(renderFeedCard(feed, count));
+    }
+    container.innerHTML = cards.join('');
+}
+
+function updateLastCheckDisplay() {
+    const el = document.getElementById('rss-last-check');
+    if (!el) return;
+    const last = getLastRSSCheck();
+    if (last) {
+        const d = new Date(last);
+        el.textContent = `Derni\u00e8re relève : ${d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}`;
+    } else {
+        el.textContent = '';
+    }
 }

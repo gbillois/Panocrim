@@ -850,6 +850,154 @@ input:focus, textarea:focus, select:focus {
     overflow: hidden;
 }
 
+/* Origin badges */
+.badge-origin-rss {
+    background: rgba(255, 165, 2, 0.15);
+    color: #ffa502;
+    border: 1px solid rgba(255, 165, 2, 0.3);
+}
+
+.badge-status-pending {
+    background: rgba(0, 212, 255, 0.15);
+    color: #00d4ff;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+}
+
+.badge-status-error {
+    background: rgba(255, 71, 87, 0.15);
+    color: #ff4757;
+    border: 1px solid rgba(255, 71, 87, 0.3);
+}
+
+/* Feed cards */
+.feeds-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+    margin-bottom: 12px;
+}
+
+.feed-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 14px;
+    border: 1px solid var(--border);
+}
+
+.feed-card-disabled {
+    opacity: 0.5;
+}
+
+.feed-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.feed-card-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.feed-card-url {
+    font-size: 12px;
+    color: var(--text-muted);
+    word-break: break-all;
+    margin-bottom: 6px;
+}
+
+.feed-card-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.feed-card-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* Feed toggle switch */
+.feed-toggle {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.feed-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.feed-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: var(--bg-input);
+    border-radius: 22px;
+    border: 1px solid var(--border);
+    transition: 0.3s;
+}
+
+.feed-toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--text-muted);
+    border-radius: 50%;
+    transition: 0.3s;
+}
+
+.feed-toggle input:checked + .feed-toggle-slider {
+    background-color: var(--accent-dim);
+    border-color: var(--accent);
+}
+
+.feed-toggle input:checked + .feed-toggle-slider::before {
+    transform: translateX(18px);
+    background-color: var(--accent);
+}
+
+/* RSS status bar */
+.rss-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    margin: 12px 0;
+    border: 1px solid var(--border);
+}
+
+.rss-status-bar p {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.rss-last-check {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 8px;
+}
+
 /* Responsive for larger phones and tablets */
 @media (min-width: 480px) {
     .filters-bar {

@@ -18,6 +18,7 @@ function navigateTo(viewName) {
     if (btn) btn.classList.add('active');
 
     if (viewName === 'dashboard') refreshDashboard();
+    if (viewName === 'add') refreshAddView();
     if (viewName === 'database') refreshDatabase();
     if (viewName === 'synthesis') refreshSynthesisView();
     if (viewName === 'linkedin') refreshLinkedInView();
@@ -216,6 +217,7 @@ async function refreshDatabase() {
         dimensionValue: valSelect?.value || '',
         month: document.getElementById('filter-month').value,
         impact: document.getElementById('filter-impact').value,
+        origin: document.getElementById('filter-origin').value,
         search: document.getElementById('filter-search').value
     };
 
@@ -453,6 +455,133 @@ function regenerateLinkedIn() {
     handleGenerateLinkedIn();
 }
 
+// ==================== RSS Feeds ====================
+
+async function refreshAddView() {
+    await renderFeedsList();
+    updateLastCheckDisplay();
+}
+
+async function handleAddFeed(e) {
+    e.preventDefault();
+    const urlInput = document.getElementById('input-feed-url');
+    const nameInput = document.getElementById('input-feed-name');
+    const url = urlInput.value.trim();
+    const name = nameInput.value.trim();
+
+    if (!url) return;
+
+    const existing = await getFeedByUrl(url);
+    if (existing) {
+        showToast('Ce flux est déjà configuré.', 'error');
+        return;
+    }
+
+    const btnEl = document.getElementById('btn-add-feed');
+    btnEl.disabled = true;
+
+    try {
+        // Validate the feed by fetching it
+        const { feedName } = await fetchRSSFeed(url);
+        const finalName = name || feedName || new URL(url).hostname;
+
+        await addFeed({ url, name: finalName });
+        showToast(`Flux "${finalName}" ajouté !`, 'success');
+
+        urlInput.value = '';
+        nameInput.value = '';
+        await renderFeedsList();
+    } catch (err) {
+        showToast(`Erreur : ${err.message}`, 'error');
+    } finally {
+        btnEl.disabled = false;
+    }
+}
+
+async function handleToggleFeed(feedId, enabled) {
+    await updateFeed(feedId, { enabled });
+    showToast(enabled ? 'Flux activé.' : 'Flux désactivé.', 'info');
+}
+
+async function handleDeleteFeed(feedId) {
+    if (!confirm('Supprimer ce flux ? Les articles déjà importés seront conservés.')) return;
+    await deleteFeed(feedId);
+    showToast('Flux supprimé.', 'info');
+    await renderFeedsList();
+}
+
+async function handleCheckSingleFeed(feedId) {
+    const statusEl = document.getElementById('rss-status');
+    const textEl = document.getElementById('rss-status-text');
+
+    statusEl.classList.remove('hidden');
+    textEl.textContent = 'Vérification du flux...';
+
+    try {
+        const feeds = await getAllFeeds();
+        const feed = feeds.find(f => f.id === feedId);
+        if (!feed) throw new Error('Flux introuvable.');
+
+        const added = await processNewFeedArticles(feed);
+        showToast(`${added} nouvel(s) article(s) importé(s).`, 'success');
+        await renderFeedsList();
+        updateLastCheckDisplay();
+    } catch (err) {
+        showToast(`Erreur : ${err.message}`, 'error');
+    } finally {
+        statusEl.classList.add('hidden');
+    }
+}
+
+async function handleCheckAllFeeds() {
+    const statusEl = document.getElementById('rss-status');
+    const textEl = document.getElementById('rss-status-text');
+    const btnEl = document.getElementById('btn-check-feeds');
+
+    statusEl.classList.remove('hidden');
+    textEl.textContent = 'Vérification de tous les flux...';
+    btnEl.disabled = true;
+
+    try {
+        const result = await checkAllFeeds();
+        showToast(`${result.totalAdded} article(s) importé(s) depuis ${result.feedsChecked} flux.`, 'success');
+        await renderFeedsList();
+        updateLastCheckDisplay();
+    } catch (err) {
+        showToast(`Erreur : ${err.message}`, 'error');
+    } finally {
+        statusEl.classList.add('hidden');
+        btnEl.disabled = false;
+    }
+}
+
+async function handleAnalyzePending() {
+    if (!getApiKey()) {
+        showToast('Configurez votre clé API dans Config.', 'error');
+        return;
+    }
+
+    const statusEl = document.getElementById('rss-status');
+    const textEl = document.getElementById('rss-status-text');
+    const btnEl = document.getElementById('btn-analyze-pending');
+
+    statusEl.classList.remove('hidden');
+    btnEl.disabled = true;
+
+    try {
+        const result = await analyzePendingArticles((current, total, title) => {
+            textEl.textContent = `Analyse ${current}/${total} : ${(title || '').substring(0, 40)}...`;
+        });
+        showToast(`${result.analyzed} article(s) analysé(s), ${result.errors} erreur(s).`, 'success');
+        await renderFeedsList();
+    } catch (err) {
+        showToast(`Erreur : ${err.message}`, 'error');
+    } finally {
+        statusEl.classList.add('hidden');
+        btnEl.disabled = false;
+    }
+}
+
 // ==================== Settings ====================
 
 function loadSettings() {
@@ -528,6 +657,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-save-analysis').addEventListener('click', saveAnalysis);
     document.getElementById('batch-url-form').addEventListener('submit', handleBatchAnalyze);
 
+    // RSS feeds
+    document.getElementById('add-feed-form').addEventListener('submit', handleAddFeed);
+    document.getElementById('btn-check-feeds').addEventListener('click', handleCheckAllFeeds);
+    document.getElementById('btn-analyze-pending').addEventListener('click', handleAnalyzePending);
+
     // Database filters
     document.getElementById('filter-dimension').addEventListener('change', async () => {
         await updateDimensionValueSelect();
@@ -536,6 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('filter-dim-value').addEventListener('change', refreshDatabase);
     document.getElementById('filter-month').addEventListener('change', refreshDatabase);
     document.getElementById('filter-impact').addEventListener('change', refreshDatabase);
+    document.getElementById('filter-origin').addEventListener('change', refreshDatabase);
     document.getElementById('filter-search').addEventListener('input', debounce(refreshDatabase, 300));
 
     // Dashboard dimension selector
@@ -571,6 +706,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial load
     refreshDashboard();
+
+    // Start RSS auto-refresh (12h interval)
+    getAllFeeds().then(feeds => {
+        if (feeds.length > 0) startAutoRefresh();
+    });
 
     if (!getApiKey()) {
         showToast('Configurez votre cl\u00e9 API Anthropic dans Config.', 'info');
