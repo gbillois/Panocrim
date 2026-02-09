@@ -713,7 +713,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (!getApiKey()) {
-        showToast('Configurez votre cl\u00e9 API Anthropic dans Config.', 'info');
+        showToast('Configurez votre cl\u00e9 API OpenAI dans Config.', 'info');
     }
 });
 

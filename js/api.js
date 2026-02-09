@@ -1,8 +1,7 @@
-// PanoCrim - Claude API Integration
+// PanoCrim - OpenAI ChatGPT API Integration
 // Dynamic multi-dimensional taxonomy
 
-const API_BASE = 'https://api.anthropic.com/v1/messages';
-const API_VERSION = '2023-06-01';
+const API_BASE = 'https://api.openai.com/v1/chat/completions';
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
 function getApiKey() {
@@ -10,7 +9,7 @@ function getApiKey() {
 }
 
 function getModel() {
-    return localStorage.getItem('panocrim_model') || 'claude-sonnet-4-20250514';
+    return localStorage.getItem('panocrim_model') || 'gpt-4o';
 }
 
 function setApiKey(key) {
@@ -58,9 +57,9 @@ function extractTextFromHtml(html) {
     return text.substring(0, 8000);
 }
 
-// ==================== Claude API Call Helper ====================
+// ==================== OpenAI API Call Helper ====================
 
-async function callClaude(prompt, maxTokens = 2048) {
+async function callLLM(prompt, maxTokens = 2048) {
     const apiKey = getApiKey();
     if (!apiKey) throw new Error('Cl\u00e9 API non configur\u00e9e. Allez dans Config pour ajouter votre cl\u00e9.');
 
@@ -68,14 +67,13 @@ async function callClaude(prompt, maxTokens = 2048) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': API_VERSION,
-            'anthropic-dangerous-direct-browser-access': 'true'
+            'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
             model: getModel(),
             max_tokens: maxTokens,
-            messages: [{ role: 'user', content: prompt }]
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.3
         })
     });
 
@@ -85,13 +83,13 @@ async function callClaude(prompt, maxTokens = 2048) {
     }
 
     const data = await response.json();
-    return data.content[0].text;
+    return data.choices[0].message.content;
 }
 
 // ==================== Article Analysis ====================
 
 async function analyzeArticle(url, content, notes) {
-    // Get existing taxonomy so Claude can reuse values
+    // Get existing taxonomy so the LLM can reuse values
     const taxonomyContext = await getTaxonomyForPrompt();
 
     const prompt = `Tu es un analyste expert en cybers\u00e9curit\u00e9 et cybercriminalit\u00e9. Analyse l'article suivant et classe-le selon une taxonomie multi-dimensionnelle.
@@ -141,7 +139,7 @@ R\u00e9ponds UNIQUEMENT avec un objet JSON valide (sans markdown, sans backticks
     "recommendations": "Recommandations de s\u00e9curit\u00e9"
 }`;
 
-    const text = await callClaude(prompt, 2048);
+    const text = await callLLM(prompt, 2048);
 
     let jsonStr = text;
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -214,7 +212,7 @@ ${JSON.stringify(articlesData, null, 2)}
 R\u00e9dige en fran\u00e7ais, style professionnel et analytique, format Markdown.
 Inclus des statistiques quand c'est pertinent. Sois factuel et pr\u00e9cis.`;
 
-    return await callClaude(prompt, 4096);
+    return await callLLM(prompt, 4096);
 }
 
 // ==================== LinkedIn Post Generation ====================
@@ -282,5 +280,5 @@ Consignes pour le post :
 
 R\u00e9ponds UNIQUEMENT avec le texte du post LinkedIn, pr\u00eat \u00e0 \u00eatre copi\u00e9-coll\u00e9.`;
 
-    return await callClaude(prompt, 1500);
+    return await callLLM(prompt, 1500);
 }
