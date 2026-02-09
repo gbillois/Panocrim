@@ -1,7 +1,6 @@
-// PanoCrim - OpenAI ChatGPT API Integration
+// PanoCrim - Google Gemini API Integration
 // Dynamic multi-dimensional taxonomy
 
-const API_BASE = 'https://api.openai.com/v1/chat/completions';
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
 function getApiKey() {
@@ -9,7 +8,7 @@ function getApiKey() {
 }
 
 function getModel() {
-    return localStorage.getItem('panocrim_model') || 'gpt-4o';
+    return localStorage.getItem('panocrim_model') || 'gemini-2.0-flash';
 }
 
 function setApiKey(key) {
@@ -57,33 +56,47 @@ function extractTextFromHtml(html) {
     return text.substring(0, 8000);
 }
 
-// ==================== OpenAI API Call Helper ====================
+// ==================== Gemini API Call Helper ====================
 
 async function callLLM(prompt, maxTokens = 2048) {
     const apiKey = getApiKey();
     if (!apiKey) throw new Error('Cl\u00e9 API non configur\u00e9e. Allez dans Config pour ajouter votre cl\u00e9.');
 
-    const response = await fetch(API_BASE, {
+    const model = getModel();
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
+            'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            model: getModel(),
-            max_tokens: maxTokens,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.3
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                maxOutputTokens: maxTokens,
+                temperature: 0.3
+            }
         })
     });
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.error?.message || `Erreur API : ${response.status}`);
+        const msg = error.error?.message || `Erreur API : ${response.status}`;
+        throw new Error(msg);
     }
 
     const data = await response.json();
-    return data.choices[0].message.content;
+
+    if (!data.candidates || data.candidates.length === 0) {
+        throw new Error('Aucune r\u00e9ponse g\u00e9n\u00e9r\u00e9e par Gemini.');
+    }
+
+    const candidate = data.candidates[0];
+    if (candidate.finishReason === 'SAFETY') {
+        throw new Error('R\u00e9ponse bloqu\u00e9e par les filtres de s\u00e9curit\u00e9 Gemini.');
+    }
+
+    return candidate.content.parts[0].text;
 }
 
 // ==================== Article Analysis ====================
